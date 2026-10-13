@@ -171,7 +171,7 @@ export default function AirportsPage() {
       render: (row) => (
         <div>
           <p className="font-medium">{row.name}</p>
-          <p className="text-xs text-secondary-500">{row.address}</p>
+          <p className="text-xs text-text-secondary">{row.address}</p>
         </div>
       ),
     },
@@ -231,8 +231,8 @@ export default function AirportsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900">Airports</h1>
-          <p className="text-secondary-500">Manage airport master data for transport bookings</p>
+          <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Airports</h1>
+          <p className="text-text-secondary">Manage airport master data for transport bookings</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => document.getElementById('file-upload')?.click()}>
@@ -257,7 +257,7 @@ export default function AirportsPage() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-2" />
+              <Loader2 className="h-8 w-8 animate-spin text-brand-blue mx-auto mb-2" />
             </div>
           ) : (
             <Table
@@ -357,9 +357,9 @@ export default function AirportsPage() {
                 id="is_active"
                 checked={formData.is_active}
                 onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                className="h-4 w-4 rounded border-secondary-300 text-primary-600 focus:ring-primary-500"
+                className="h-4 w-4 rounded border-border text-brand-blue focus:ring-brand-blue"
               />
-              <label htmlFor="is_active" className="text-sm font-medium text-secondary-700">
+              <label htmlFor="is_active" className="text-sm font-medium text-text-primary">
                 Active
               </label>
             </div>

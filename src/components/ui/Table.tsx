@@ -1,8 +1,9 @@
 'use client';
 
-import { HTMLAttributes, forwardRef } from 'react';
+import { HTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
+import { ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
 
 export interface Column<T> {
   key: string;
@@ -24,72 +25,74 @@ interface TableProps<T> extends HTMLAttributes<HTMLTableElement> {
 }
 
 export function Table<T>({
-  columns,
-  data,
-  keyExtractor,
-  isLoading,
-  emptyMessage = 'No data available',
-  onRowClick,
-  striped = true,
-  hoverable = true,
-  className,
-  ...props
+  columns, data, keyExtractor,
+  isLoading, emptyMessage = 'No data available',
+  onRowClick, striped = false, hoverable = true,
+  className, ...props
 }: TableProps<T>) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto scrollbar-thin">
       <table className={cn('w-full text-sm', className)} {...props}>
-        <thead className="bg-secondary-50 border-b border-secondary-200">
+        <thead className="bg-ops-card2 border-b border-border sticky top-0">
           <tr>
-            {columns.map((column) => (
+            {columns.map((col) => (
               <th
-                key={column.key}
+                key={col.key}
                 className={cn(
-                  'px-4 py-3 text-left font-medium text-secondary-700 uppercase tracking-wider text-xs',
-                  column.className
+                  'px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-secondary',
+                  col.className
                 )}
                 scope="col"
               >
-                {column.header}
+                {col.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-secondary-100">
+        <tbody className="divide-y divide-ops-line bg-ops-card">
           {isLoading ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <tr key={i}>
+                {columns.map((col) => (
+                  <td key={col.key} className="px-4 py-3.5">
+                    <div className={cn('h-3.5 rounded-full skeleton', col.className ? 'w-3/4' : 'w-2/3')} />
+                  </td>
+                ))}
+              </tr>
+            ))
+          ) : data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-secondary-500">
-                <div className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-primary-600" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Loading...
+              <td colSpan={columns.length}>
+                <div className="flex flex-col items-center justify-center py-14 gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-ops-card2 flex items-center justify-center">
+                    <Inbox className="h-5 w-5 text-text-tertiary" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-text-secondary">No results</p>
+                    {emptyMessage !== 'No data available' && (
+                      <p className="text-xs text-text-tertiary mt-0.5">{emptyMessage}</p>
+                    )}
+                  </div>
                 </div>
               </td>
             </tr>
-          ) : data.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-secondary-500">
-                {emptyMessage}
-              </td>
-            </tr>
           ) : (
-            data.map((row, rowIndex) => (
+            data.map((row, idx) => (
               <tr
                 key={keyExtractor(row)}
                 className={cn(
-                  hoverable && 'hover:bg-secondary-50',
-                  striped && rowIndex % 2 === 1 && 'bg-secondary-50/50',
+                  'transition-colors duration-100',
+                  hoverable && 'hover:bg-ops-bg',
+                  striped && idx % 2 === 1 && 'bg-ops-bg/40',
                   onRowClick && 'cursor-pointer'
                 )}
                 onClick={() => onRowClick?.(row)}
               >
-                {columns.map((column) => (
-                  <td
-                    key={column.key}
-                    className={cn('px-4 py-3 text-secondary-900', column.className)}
-                  >
-                    {column.render ? column.render(row, rowIndex) : (row as Record<string, unknown>)[column.key] as React.ReactNode}
+                {columns.map((col) => (
+                  <td key={col.key} className={cn('px-4 py-3.5 text-text-primary', col.className)}>
+                    {col.render
+                      ? col.render(row, idx)
+                      : (row as Record<string, unknown>)[col.key] as React.ReactNode}
                   </td>
                 ))}
               </tr>
@@ -121,51 +124,31 @@ export function Pagination({ currentPage, totalPages, onPageChange, showPageNumb
     : [];
 
   return (
-    <nav className="flex items-center justify-center gap-1 mt-4" aria-label="Pagination">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 1}
-        aria-label="Previous page"
-      >
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-      </Button>
-
-      {pages.map((page) => (
-        <Button
-          key={page}
-          variant={page === currentPage ? 'primary' : 'ghost'}
-          size="sm"
-          onClick={() => onPageChange(page)}
-          aria-label={`Page ${page}`}
-          aria-current={page === currentPage ? 'page' : undefined}
-        >
-          {page}
+    <nav className="flex items-center justify-between mt-4 px-1" aria-label="Pagination">
+      <p className="text-xs text-text-secondary">Page <span className="font-semibold text-text-primary">{currentPage}</span> of {totalPages}</p>
+      <div className="flex items-center gap-1">
+        <Button variant="secondary" size="sm" onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} aria-label="Previous">
+          <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
-      ))}
-
-      {showPageNumbers && totalPages > 5 && currentPage > 3 && (
-        <span className="px-2 text-secondary-500">...</span>
-      )}
-
-      {showPageNumbers && totalPages > 5 && currentPage < totalPages - 2 && (
-        <span className="px-2 text-secondary-500">...</span>
-      )}
-
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage === totalPages}
-        aria-label="Next page"
-      >
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </Button>
+        {pages.map((page) => (
+          <Button
+            key={page}
+            size="sm"
+            variant={page === currentPage ? 'primary' : 'ghost'}
+            onClick={() => onPageChange(page)}
+            aria-current={page === currentPage ? 'page' : undefined}
+            className={page !== currentPage ? 'text-text-secondary' : ''}
+          >
+            {page}
+          </Button>
+        ))}
+        {showPageNumbers && totalPages > 5 && currentPage < totalPages - 2 && (
+          <span className="px-1 text-text-tertiary text-xs">…</span>
+        )}
+        <Button variant="secondary" size="sm" onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages} aria-label="Next">
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </nav>
   );
 }

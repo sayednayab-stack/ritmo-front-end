@@ -168,7 +168,7 @@ export default function TransportConfigPage() {
       render: (c) => (
         <div>
           <span className="font-mono font-medium">{c.flight_class}</span>
-          {c.flight_class_label && <div className="text-xs text-secondary-500">{c.flight_class_label}</div>}
+          {c.flight_class_label && <div className="text-xs text-text-secondary">{c.flight_class_label}</div>}
         </div>
       ),
     },
@@ -203,8 +203,8 @@ export default function TransportConfigPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900">Transport Config</h1>
-          <p className="text-secondary-500">Vehicle allocation rules per flight class and channel manager</p>
+          <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Transport Config</h1>
+          <p className="text-text-secondary">Vehicle allocation rules per flight class and channel manager</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={seed}>
@@ -218,8 +218,8 @@ export default function TransportConfigPage() {
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-secondary-700">
-        <input type="checkbox" className="h-4 w-4 rounded border-secondary-300" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+      <label className="flex items-center gap-2 text-sm text-text-primary">
+        <input type="checkbox" className="h-4 w-4 rounded border-border" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
         Show inactive
       </label>
 
@@ -254,12 +254,12 @@ export default function TransportConfigPage() {
             <Input label="Minibus vehicle tiers" value={form.minibus_vehicle_tiers} onChange={(e) => set('minibus_vehicle_tiers', e.target.value)} helperText="Comma-separated" />
           </div>
           <div className="flex gap-6">
-            <label className="flex items-center gap-2 text-sm text-secondary-700">
-              <input type="checkbox" className="h-4 w-4 rounded border-secondary-300" checked={form.is_private} onChange={(e) => set('is_private', e.target.checked)} />
+            <label className="flex items-center gap-2 text-sm text-text-primary">
+              <input type="checkbox" className="h-4 w-4 rounded border-border" checked={form.is_private} onChange={(e) => set('is_private', e.target.checked)} />
               Private vehicle
             </label>
-            <label className="flex items-center gap-2 text-sm text-secondary-700">
-              <input type="checkbox" className="h-4 w-4 rounded border-secondary-300" checked={form.is_active} onChange={(e) => set('is_active', e.target.checked)} />
+            <label className="flex items-center gap-2 text-sm text-text-primary">
+              <input type="checkbox" className="h-4 w-4 rounded border-border" checked={form.is_active} onChange={(e) => set('is_active', e.target.checked)} />
               Active
             </label>
           </div>
@@ -280,7 +280,7 @@ export default function TransportConfigPage() {
       </Modal>
 
       <Modal isOpen={!!toDelete} onClose={() => setToDelete(null)} title="Delete configuration" size="sm">
-        <p className="text-sm text-secondary-600">
+        <p className="text-sm text-text-secondary">
           Delete <strong>{toDelete?.flight_class}</strong> for {toDelete && getCMProviderLabel(toDelete.cm_provider)}? Bookings in this class will no longer resolve a configuration.
         </p>
         <div className="flex justify-end gap-2 pt-4">

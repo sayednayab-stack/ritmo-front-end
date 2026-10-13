@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Toast {
@@ -11,10 +11,9 @@ interface Toast {
   message?: string;
   duration?: number;
 }
-
 interface ToastContextType {
   toasts: Toast[];
-  addToast: (toast: Omit<Toast, 'id'>) => void;
+  addToast: (t: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
 }
 
@@ -23,21 +22,15 @@ const ToastContext = createContext<ToastContextType | null>(null);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    const newToast = { ...toast, id };
-    setToasts((prev) => [...prev, newToast]);
-    
-    if (toast.duration !== 0) {
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, toast.duration || 5000);
+  const addToast = useCallback((t: Omit<Toast, 'id'>) => {
+    const id = Math.random().toString(36).slice(2, 9);
+    setToasts((prev) => [...prev.slice(-4), { ...t, id }]);
+    if (t.duration !== 0) {
+      setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== id)), t.duration ?? 4500);
     }
   }, []);
 
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  const removeToast = useCallback((id: string) => setToasts((prev) => prev.filter((x) => x.id !== id)), []);
 
   return (
     <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
@@ -48,59 +41,48 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider');
-  }
-  return context;
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error('useToast must be inside ToastProvider');
+  return ctx;
 }
 
 function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
-  const icons = {
-    success: <CheckCircle className="h-5 w-5 text-green-500" />,
-    error: <AlertCircle className="h-5 w-5 text-red-500" />,
-    warning: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-    info: <Info className="h-5 w-5 text-blue-500" />,
-  };
-
-  const backgrounds = {
-    success: 'bg-green-50 border-green-200',
-    error: 'bg-red-50 border-red-200',
-    warning: 'bg-yellow-50 border-yellow-200',
-    info: 'bg-blue-50 border-blue-200',
+  const cfg = {
+    success: { icon: <CheckCircle2 className="h-4 w-4 text-success" />,     bar: 'bg-success',      ring: 'ring-success/15' },
+    error:   { icon: <AlertCircle   className="h-4 w-4 text-danger" />,      bar: 'bg-danger',       ring: 'ring-danger/15' },
+    warning: { icon: <AlertTriangle className="h-4 w-4 text-alert-amber" />, bar: 'bg-alert-amber',  ring: 'ring-alert-amber/15' },
+    info:    { icon: <Info          className="h-4 w-4 text-brand-wine" />,   bar: 'bg-brand-wine',   ring: 'ring-brand-blue/15' },
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-full max-w-sm">
-      {toasts.map((toast) => (
+    <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 w-full max-w-[340px] pointer-events-none">
+      {toasts.map((t) => (
         <div
-          key={toast.id}
+          key={t.id}
           className={cn(
-            'flex items-start gap-3 p-4 rounded-lg border shadow-lg animate-in slide-in-from-right duration-300',
-            backgrounds[toast.type]
+            'pointer-events-auto relative flex items-start gap-3 px-4 py-3.5 rounded-xl',
+            'bg-ops-card border border-border shadow-lift ring-4 overflow-hidden',
+            cfg[t.type].ring,
+            'animate-slide-up'
           )}
           role="alert"
         >
-          {icons[toast.type]}
+          <div className="flex-shrink-0 mt-0.5">{cfg[t.type].icon}</div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-secondary-900">{toast.title}</p>
-            {toast.message && (
-              <p className="mt-1 text-sm text-secondary-600">{toast.message}</p>
-            )}
+            <p className="text-sm font-semibold text-text-primary">{t.title}</p>
+            {t.message && <p className="mt-0.5 text-xs text-text-secondary leading-relaxed">{t.message}</p>}
           </div>
           <button
-            onClick={() => onRemove(toast.id)}
-            className="text-secondary-400 hover:text-secondary-600 flex-shrink-0"
-            aria-label="Dismiss"
+            onClick={() => onRemove(t.id)}
+            className="flex-shrink-0 p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-ops-card2 transition-colors"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
+          <div className={cn('absolute bottom-0 left-0 right-0 h-[2px]', cfg[t.type].bar, 'opacity-40')} />
         </div>
       ))}
     </div>
   );
 }
 
-export function toast() {
-  return useToast();
-}
+export function toast() { return useToast(); }

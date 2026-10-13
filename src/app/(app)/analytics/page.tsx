@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Input';
-import { statsApi, errorMessage } from '@/lib/api';
+import { statsApi } from '@/lib/api';
 import { getCMProviderLabel, getSourceSystemLabel } from '@/lib/utils';
-import type { DashboardStats } from '@/types';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: '#eab308',
@@ -25,13 +25,12 @@ const toRows = (rec: Record<string, number>, label: (k: string) => string) =>
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState(14);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    setError('');
-    statsApi.get(days).then((r) => setStats(r.data)).catch((e) => setError(errorMessage(e, 'Failed to load analytics')));
-  }, [days]);
+  const { data: stats, isLoading, error } = useQuery({
+    queryKey: ['analytics', days],
+    queryFn: () => statsApi.get(days).then((r) => r.data),
+    staleTime: 30_000,
+  });
 
   const byStatus = stats ? toRows(stats.by_status, (k) => k.replace(/_/g, ' ')) : [];
   const bySource = stats ? toRows(stats.by_source_system, getSourceSystemLabel) : [];
@@ -57,8 +56,8 @@ export default function AnalyticsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900">Analytics</h1>
-          <p className="text-secondary-500">Booking volume and outcomes (active bookings)</p>
+          <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Analytics</h1>
+          <p className="text-text-secondary">Booking volume and outcomes (active bookings)</p>
         </div>
         <div className="w-40">
           <Select
@@ -72,7 +71,7 @@ export default function AnalyticsPage() {
 
       {error && (
         <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700" role="alert">
-          {error}
+          Failed to load analytics
         </div>
       )}
 
@@ -81,6 +80,9 @@ export default function AnalyticsPage() {
           <CardTitle>Bookings created per day</CardTitle>
         </CardHeader>
         <CardContent>
+          {isLoading ? (
+            <div className="h-64 bg-ops-card2 animate-pulse rounded-lg" />
+          ) : (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={stats?.daily ?? []} margin={{ left: 0, right: 16 }}>
               <CartesianGrid stroke="#e2e8f0" vertical={false} />
@@ -90,6 +92,7 @@ export default function AnalyticsPage() {
               <Line type="monotone" dataKey="count" name="Bookings" stroke="#0284c7" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 
@@ -98,19 +101,25 @@ export default function AnalyticsPage() {
           <CardHeader>
             <CardTitle>By status</CardTitle>
           </CardHeader>
-          <CardContent>{bar(byStatus, (k) => STATUS_COLORS[k] ?? '#64748b')}</CardContent>
+          <CardContent>
+            {isLoading ? <div className="h-48 bg-ops-card2 animate-pulse rounded-lg" /> : bar(byStatus, (k) => STATUS_COLORS[k] ?? '#64748b')}
+          </CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle>By source system</CardTitle>
           </CardHeader>
-          <CardContent>{bar(bySource)}</CardContent>
+          <CardContent>
+            {isLoading ? <div className="h-48 bg-ops-card2 animate-pulse rounded-lg" /> : bar(bySource)}
+          </CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle>By channel manager</CardTitle>
           </CardHeader>
-          <CardContent>{bar(byCm)}</CardContent>
+          <CardContent>
+            {isLoading ? <div className="h-48 bg-ops-card2 animate-pulse rounded-lg" /> : bar(byCm)}
+          </CardContent>
         </Card>
       </div>
     </div>

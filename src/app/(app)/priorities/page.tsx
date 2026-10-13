@@ -11,7 +11,7 @@ const fields: FieldDef[] = [
     label: 'Source system',
     type: 'select',
     required: true,
-    options: ['AI_IRROPS', 'AIX_IRROPS', 'IX_IRROPS', 'EY_CLASS'].map((v) => ({ value: v, label: getSourceSystemLabel(v.toLowerCase()) })),
+    options: ['ai_irrops', 'ix_irrops', 'ey_class'].map((v) => ({ value: v, label: getSourceSystemLabel(v) })),
   },
   { key: 'airline', label: 'Airline code', required: true, placeholder: 'e.g. AI' },
   { key: 'airport_code', label: 'Airport (IATA)', placeholder: 'Blank = any airport', help: 'An airport-specific rule wins over a blank one at the same tier' },

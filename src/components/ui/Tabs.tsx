@@ -51,7 +51,7 @@ export const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
       ref={ref}
       role="tablist"
       aria-orientation="horizontal"
-      className={cn('inline-flex h-10 items-center justify-center rounded-lg bg-secondary-100 p-1 gap-1', className)}
+      className={cn('inline-flex h-10 items-center justify-center rounded-lg bg-ops-card2 p-1 gap-1', className)}
       {...props}
     >
       {children}
@@ -82,10 +82,10 @@ export const TabsTrigger = forwardRef<HTMLButtonElement, TabsTriggerProps>(
         data-disabled={disabled}
         onClick={() => !disabled && setActiveTab(value)}
         className={cn(
-          'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed',
+          'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/30 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed',
           isActive
-            ? 'bg-white text-secondary-900 shadow-sm'
-            : 'text-secondary-600 hover:text-secondary-900 hover:bg-secondary-200',
+            ? 'bg-white text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary hover:bg-ops-card2',
           className
         )}
         {...props}

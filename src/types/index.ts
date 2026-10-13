@@ -48,7 +48,8 @@ export interface BookingDetail extends Booking {
   remarks: string | null;
   cm_request_payload: unknown;
   cm_response_payload: unknown;
-  callback_response: string | null;
+  callback_response: unknown;
+  iway_api_log: unknown;
 }
 
 export interface BookingListResponse {

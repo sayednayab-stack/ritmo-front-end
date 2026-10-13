@@ -86,7 +86,7 @@ export default function JourneysPage() {
             j.fleet_request ? (
               <div>
                 <div className="font-medium">{j.fleet_request.request_no}</div>
-                <div className="text-xs text-secondary-500">
+                <div className="text-xs text-text-secondary">
                   {j.fleet_request.from_location} → {j.fleet_request.to_location}
                 </div>
               </div>

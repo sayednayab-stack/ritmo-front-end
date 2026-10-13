@@ -5,6 +5,7 @@ import api, { errorMessage, priorityApi } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Table } from '@/components/ui/Table';
+import { useToast } from '@/components/ui/Toast';
 import { getCMProviderLabel, getSourceSystemLabel } from '@/lib/utils';
 import type { SourceSystemInfo, VehicleTypeMapping } from '@/types';
 
@@ -19,8 +20,8 @@ export default function SettingsPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [systems, setSystems] = useState<SourceSystemInfo[]>([]);
   const [mappings, setMappings] = useState<VehicleTypeMapping[]>([]);
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const { addToast } = useToast();
 
   useEffect(() => {
     Promise.all([api.get<Me>('/auth/me'), priorityApi.sourceSystems(), priorityApi.vehicleMappings()])
@@ -29,47 +30,50 @@ export default function SettingsPage() {
         setSystems(s.data);
         setMappings(v.data);
       })
-      .catch((e) => setError(errorMessage(e, 'Failed to load settings')))
+      .catch((e) => addToast({ type: 'error', title: 'Failed to load settings', message: errorMessage(e) }))
       .finally(() => setLoading(false));
-  }, []);
+  }, [addToast]);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-secondary-900">Settings</h1>
-        <p className="text-secondary-500">Your account and read-only routing reference data</p>
+        <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Settings</h1>
+        <p className="text-text-secondary">Your account and read-only routing reference data</p>
       </div>
-
-      {error && (
-        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700" role="alert">
-          {error}
-        </div>
-      )}
 
       <Card>
         <CardHeader>
           <CardTitle>Account</CardTitle>
         </CardHeader>
         <CardContent>
-          {me ? (
+          {loading ? (
+            <div className="grid gap-4 sm:grid-cols-3 animate-pulse">
+              {[1, 2, 3].map((i) => (
+                <div key={i}>
+                  <div className="h-3 w-20 skeleton rounded mb-2" />
+                  <div className="h-4 w-32 skeleton rounded" />
+                </div>
+              ))}
+            </div>
+          ) : me ? (
             <dl className="grid gap-4 sm:grid-cols-3 text-sm">
               <div>
-                <dt className="text-secondary-500">Username</dt>
+                <dt className="text-text-secondary">Username</dt>
                 <dd className="font-medium">{me.username}</dd>
               </div>
               <div>
-                <dt className="text-secondary-500">Email</dt>
+                <dt className="text-text-secondary">Email</dt>
                 <dd className="font-medium">{me.email}</dd>
               </div>
               <div>
-                <dt className="text-secondary-500">Role</dt>
+                <dt className="text-text-secondary">Role</dt>
                 <dd>
                   <Badge variant={me.is_admin ? 'info' : 'secondary'}>{me.is_admin ? 'Administrator' : 'User'}</Badge>
                 </dd>
               </div>
             </dl>
           ) : (
-            <p className="text-sm text-secondary-500">{loading ? 'Loading…' : '—'}</p>
+            <p className="text-sm text-text-secondary">—</p>
           )}
         </CardContent>
       </Card>

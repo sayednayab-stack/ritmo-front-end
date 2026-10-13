@@ -87,6 +87,7 @@ export function ResourcePage<T extends { id: number | string }>({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [toDelete, setToDelete] = useState<T | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{ action: RowAction<T>; row: T; message: string } | null>(null);
   const [dynamicOptions, setDynamicOptions] = useState<Record<string, { value: string; label: string }[]>>({});
 
   const base = endpoint.replace(/\/$/, '');
@@ -211,7 +212,14 @@ export function ResourcePage<T extends { id: number | string }>({
   };
 
   const runAction = async (action: RowAction<T>, row: T) => {
-    if (action.confirm && !window.confirm(action.confirm)) return;
+    if (action.confirm) {
+      setPendingConfirm({ action, row, message: action.confirm });
+      return;
+    }
+    await executeAction(action, row);
+  };
+
+  const executeAction = async (action: RowAction<T>, row: T) => {
     try {
       await action.run(row);
       addToast({ type: 'success', title: `${action.label} done` });
@@ -266,8 +274,8 @@ export function ResourcePage<T extends { id: number | string }>({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900">{title}</h1>
-          <p className="text-secondary-500">{description}</p>
+          <h1 className="text-2xl font-bold text-text-primary">{title}</h1>
+          <p className="text-text-secondary">{description}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={load} aria-label="Refresh">
@@ -313,7 +321,7 @@ export function ResourcePage<T extends { id: number | string }>({
               const set = (v: any) => setForm((f) => ({ ...f, [fd.key]: v }));
               if (fd.type === 'checkbox')
                 return (
-                  <label key={fd.key} className="flex items-center gap-2 text-sm text-secondary-700 sm:col-span-2">
+                  <label key={fd.key} className="flex items-center gap-2 text-sm text-text-primary sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={!!form[fd.key]}
@@ -373,7 +381,7 @@ export function ResourcePage<T extends { id: number | string }>({
       </Modal>
 
       <Modal isOpen={!!toDelete} onClose={() => setToDelete(null)} title={`Delete ${noun}`} size="sm">
-        <p className="text-sm text-secondary-600">
+        <p className="text-sm text-text-secondary">
           This permanently deletes the {noun.toLowerCase()}. It can&apos;t be undone.
         </p>
         <div className="flex justify-end gap-2 pt-4">
@@ -382,6 +390,26 @@ export function ResourcePage<T extends { id: number | string }>({
           </Button>
           <Button variant="danger" onClick={remove} loading={saving}>
             Delete
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!pendingConfirm} onClose={() => setPendingConfirm(null)} title="Confirm action" size="sm">
+        <p className="text-sm text-text-secondary">{pendingConfirm?.message}</p>
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="secondary" onClick={() => setPendingConfirm(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={async () => {
+              if (!pendingConfirm) return;
+              const { action, row } = pendingConfirm;
+              setPendingConfirm(null);
+              await executeAction(action, row);
+            }}
+          >
+            Confirm
           </Button>
         </div>
       </Modal>
