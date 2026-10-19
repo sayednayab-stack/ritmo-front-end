@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import api, { errorMessage } from '@/lib/api';

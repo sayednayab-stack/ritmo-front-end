@@ -1,8 +1,5 @@
-'use client';
-
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -53,7 +50,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile }: SidebarProps) {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const narrow = collapsed;
 
   return (
@@ -83,7 +80,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
 
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 flex-shrink-0">
-          <Link href="/" className={cn('flex items-center gap-2.5 min-w-0', narrow && 'lg:hidden')}>
+          <Link to="/" className={cn('flex items-center gap-2.5 min-w-0', narrow && 'lg:hidden')}>
             <div className="w-8 h-8 rounded-xl bg-accent-gold/20 border border-accent-gold/30 flex items-center justify-center flex-shrink-0">
               <span className="font-serif text-accent-gold font-medium text-base leading-none">R</span>
             </div>
@@ -93,7 +90,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
             </div>
           </Link>
           {narrow && (
-            <Link href="/" className="hidden lg:flex w-8 h-8 rounded-xl bg-accent-gold/20 border border-accent-gold/30 items-center justify-center mx-auto">
+            <Link to="/" className="hidden lg:flex w-8 h-8 rounded-xl bg-accent-gold/20 border border-accent-gold/30 items-center justify-center mx-auto">
               <span className="font-serif text-accent-gold font-medium text-base leading-none">R</span>
             </Link>
           )}
@@ -130,7 +127,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
                   return (
                     <Link
                       key={item.href}
-                      href={item.href}
+                      to={item.href}
                       onClick={onCloseMobile}
                       className={cn(
                         'relative flex items-center gap-2.5 px-2 py-2 rounded-xl text-sm font-medium transition-all duration-200',
@@ -166,7 +163,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
           <div className={cn('mx-2 h-px mb-3', narrow && 'mx-1')}
             style={{ background: 'rgba(255,255,255,.08)' }} />
           <Link
-            href="/settings"
+            to="/settings"
             onClick={onCloseMobile}
             className={cn(
               'relative flex items-center gap-2.5 px-2 py-2 rounded-xl text-sm font-medium transition-all duration-200',
@@ -195,8 +192,8 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile
 interface Me { username: string; email: string; is_admin: boolean; }
 
 export function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
-  const router = useRouter();
-  const pathname = usePathname();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
 
@@ -206,8 +203,7 @@ export function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
 
   const signOut = async () => {
     await axios.post('/api/auth/logout').catch(() => undefined);
-    router.replace('/login');
-    router.refresh();
+    navigate('/login', { replace: true });
   };
 
   const pageTitle = (() => {

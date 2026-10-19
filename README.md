@@ -1,35 +1,29 @@
-# RITMO frontend
+# RITMO frontend (React)
 
-Next.js 14 + Tailwind admin console for `fa-ritmo-api`.
+React 18 + Vite + React Router + Tailwind admin console for `fa-ritmo-api`, ported from the
+Next.js version in `../ritmo-front-end`. Same UI and pages.
 
 ## Run
 
 ```bash
-cp .env.example .env.local   # set BACKEND_URL, EXTERNAL_API_KEY (and API_KEY if the backend has one)
+cp .env.example .env.local   # BACKEND_URL, EXTERNAL_API_KEY (must match the backend), API_KEY optional
 npm install
-npm run dev                  # http://localhost:3001
+npm run dev                  # http://localhost:3003  (Express + Vite HMR, one port)
 ```
 
-Log in with a backend user (`POST /auth/login`). Don't run `next dev` and `next build`
-at the same time; they share `.next` and corrupt each other.
+Production: `npm run build && npm start` (Express serves `dist/` and the API proxy).
 
-## How auth works
+## Why there is a small Express server
 
-- The browser never sees an API key. All calls go to `/api/backend/*`, a server-side proxy
-  (`src/app/api/backend/[...path]/route.ts`) that adds `X-Api-Key` (`EXTERNAL_API_KEY`),
-  `API-Key` (`API_KEY`, if set) and the user's JWT.
-- `/api/auth/login` stores the JWT in an httpOnly cookie; `middleware.ts` redirects
-  unauthenticated page loads to `/login`.
-- The proxy only forwards an allow-list of backend prefixes (`src/lib/server/backend.ts`).
-  Add a prefix there when the backend gains a new area.
+A browser-only app cannot keep a secret. `server/index.ts` does what the Next.js API routes did:
 
-## Pages
+- `/api/auth/login` exchanges credentials with the backend and stores the JWT in an httpOnly cookie.
+- `/api/backend/*` proxies an allow-list of backend areas, adding `X-Api-Key` (`EXTERNAL_API_KEY`),
+  `API-Key` (`API_KEY`, if set) and the user's JWT. The browser never sees the keys.
+- Page loads without a session cookie are redirected to `/login`.
 
-| Area | Pages | Backend |
-|---|---|---|
-| Operations | Dashboard, Bookings, Analytics, Schedulers | `/admin/*`, `/iway/schedulers/*` |
-| Routing | Priority Rules, Vendors, Transport Config, Airports | `/admin/priority-rules`, `/vendors`, `/transport-config`, `/airports` |
-| Fleet | Vehicles, Drivers, Partners, Hotels, Fleet Requests, Journeys | `/fleet`, `/drivers`, `/partners`, `/hotels`, `/fleet_requests`, `/journeys` |
+Add a backend area to `ALLOWED_PREFIXES` in `server/index.ts` when the backend gains one.
 
-Simple CRUD pages share `src/components/resource/ResourcePage.tsx`; add a page by giving it
-an endpoint, field definitions and table columns.
+## Layout
+
+`src/pages/*` (one per route, wired in `src/App.tsx`), `src/components/*`, `src/lib/api.ts`.

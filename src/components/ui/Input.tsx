@@ -1,5 +1,3 @@
-'use client';
-
 import { forwardRef, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 

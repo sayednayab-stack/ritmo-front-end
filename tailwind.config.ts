@@ -2,16 +2,16 @@ import type { Config } from 'tailwindcss'
 
 const config: Config = {
   content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './index.html',
+    './src/components/**/*.{ts,tsx}',
+    './src/pages/**/*.{ts,tsx}',
   ],
   theme: {
     extend: {
       fontFamily: {
-        sans:  ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
-        serif: ['var(--font-garamond)', 'EB Garamond', 'Georgia', 'serif'],
-        mono:  ['var(--font-mono)', 'IBM Plex Mono', 'monospace'],
+        sans:  ['Inter', 'system-ui', 'sans-serif'],
+        serif: ['EB Garamond', 'Georgia', 'serif'],
+        mono:  ['IBM Plex Mono', 'monospace'],
       },
       colors: {
         /* ── Canvas ── */

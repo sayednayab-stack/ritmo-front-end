@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useRef, useEffect, KeyboardEvent, ChangeEvent, forwardRef } from 'react';
 import { ChevronDown, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
