@@ -1,13 +1,17 @@
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Search, RefreshCw, Download } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
 import { Table, Column, Pagination } from '@/components/ui/Table';
 import { Modal } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { bookingApi, errorMessage } from '@/lib/api';
+import { queryKeys, useBookings, useSourceSystems } from '@/lib/queries';
+import { toCsv } from '@/lib/csv';
 import { useToast } from '@/components/ui/Toast';
 import { formatDate, formatDateTime, getCMProviderLabel, getSourceSystemLabel } from '@/lib/utils';
 import type { Booking, BookingDetail, BookingFilters } from '@/types';
@@ -23,66 +27,88 @@ export default function BookingsPage() {
   );
 }
 
-function BookingsContent() {
-  const [params] = useSearchParams();
-  const { addToast } = useToast();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<BookingFilters>({
-    page: 1,
-    limit: LIMIT,
-    status: params.get('status') ?? undefined,
-    source_system: params.get('source_system') ?? undefined,
-  });
-  const [search, setSearch] = useState('');
-  const [exporting, setExporting] = useState(false);
-  const [selected, setSelected] = useState<BookingDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+const FILTER_KEYS = ['q', 'status', 'source_system', 'cm_provider', 'pickup_from', 'pickup_to'] as const;
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== undefined));
-      const res = await bookingApi.list(params);
-      setBookings(res.data.bookings);
-      setTotal(res.data.total);
-      if (silent) addToast({ type: 'success', title: 'Bookings refreshed' });
-    } catch (e) {
-      addToast({ type: 'error', title: 'Failed to load bookings', message: errorMessage(e) });
-    } finally {
-      setLoading(false);
+function BookingsContent() {
+  const { addToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Filters live in the URL, so refresh, back/forward and shared links keep them.
+  const filters: BookingFilters = useMemo(() => {
+    const f: BookingFilters = { page: Math.max(1, Number(searchParams.get('page')) || 1), limit: LIMIT };
+    for (const k of FILTER_KEYS) {
+      const v = searchParams.get(k);
+      if (v) f[k] = v;
     }
-  }, [filters, addToast]);
+    if (searchParams.get('include_inactive') === '1') f.include_inactive = true;
+    return f;
+  }, [searchParams]);
+
+  const setFilter = (patch: Partial<BookingFilters>) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [k, v] of Object.entries(patch)) {
+          if (v === undefined || v === '' || v === false) next.delete(k);
+          else next.set(k, v === true ? '1' : String(v));
+        }
+        if (!('page' in patch)) next.delete('page');
+        return next;
+      },
+      { replace: true }
+    );
+
+  // Search as you type, but only hit the API once typing pauses.
+  const [search, setSearch] = useState(filters.q ?? '');
+  useEffect(() => {
+    if (search.trim() === (filters.q ?? '')) return;
+    const t = setTimeout(() => setFilter({ q: search.trim() || undefined }), 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  const { data: sourceSystems } = useSourceSystems();
+  const list = useBookings(filters);
+  const bookings = list.data?.bookings ?? [];
+  const total = list.data?.total ?? 0;
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (list.error) addToast({ type: 'error', title: 'Failed to load bookings', message: errorMessage(list.error) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.error]);
 
-  const setFilter = (patch: Partial<BookingFilters>) => setFilters((f) => ({ ...f, ...patch, page: 1 }));
+  const [exporting, setExporting] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Booking | null>(null);
+  const detail = useQuery({
+    queryKey: queryKeys.booking(selectedId ?? ''),
+    queryFn: () => bookingApi.get(selectedId!).then((r) => r.data),
+    enabled: !!selectedId,
+  });
+  useEffect(() => {
+    if (detail.error) {
+      addToast({ type: 'error', title: 'Failed to load booking', message: errorMessage(detail.error) });
+      setSelectedId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail.error]);
+  // Show the row we already have immediately; the full record replaces it when it arrives.
+  const selected: BookingDetail | null = selectedId ? (detail.data ?? (preview as BookingDetail | null)) : null;
 
   const exportCsv = async () => {
     setExporting(true);
     try {
-      const params = Object.fromEntries(Object.entries({ ...filters, limit: 10000, page: 1 }).filter(([, v]) => v !== '' && v !== undefined));
-      const res = await bookingApi.list(params);
+      const res = await bookingApi.list({ ...filters, limit: 10000, page: 1 });
       const rows = res.data.bookings;
-      const headers = ['ID', 'Booking Ref', 'Passenger', 'Source', 'CM', 'Transport', 'Airport', 'Hotel', 'Pickup Date', 'Pickup Time', 'Status', 'Sync Status', 'Created'];
-      // Values come from external systems: a leading = + - @ would run as a formula in Excel.
-      const escape = (v: unknown) => {
-        const s = String(v ?? '');
-        return `"${(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
-      };
-      const csv = [
-        headers.join(','),
-        ...rows.map((b) => [
+      const csv = toCsv(
+        ['ID', 'Booking Ref', 'Passenger', 'Source', 'CM', 'Transport', 'Airport', 'Hotel', 'Pickup Date', 'Pickup Time', 'Status', 'Sync Status', 'Created'],
+        rows.map((b) => [
           b.id, b.ritmo_booking_id, b.passenger_name,
           b.source_system, b.cm_provider ?? '', b.transport_type, b.airport_iata ?? '',
           b.hotel_name, b.pickup_date, b.pickup_time, b.status, b.sync_status, b.created_at,
-        ].map(escape).join(',')),
-      ].join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
+        ])
+      );
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
       const a = document.createElement('a');
       a.href = url;
       a.download = `bookings-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -96,19 +122,12 @@ function BookingsContent() {
     }
   };
 
-  const openDetail = async (b: Booking) => {
-    setDetailLoading(true);
-    setSelected({ ...b } as BookingDetail);
-    try {
-      const res = await bookingApi.get(b.ritmo_booking_id);
-      setSelected(res.data);
-    } catch (e) {
-      addToast({ type: 'error', title: 'Failed to load booking', message: errorMessage(e) });
-      setSelected(null);
-    } finally {
-      setDetailLoading(false);
-    }
+  const openDetail = (b: Booking) => {
+    setPreview(b);
+    setSelectedId(b.ritmo_booking_id);
   };
+  const detailLoading = detail.isLoading;
+  const loading = list.isLoading;
 
   const columns: Column<Booking>[] = [
     { key: 'ritmo_booking_id', header: 'Booking', render: (b) => <span className="font-mono text-xs">{b.ritmo_booking_id}</span> },
@@ -154,21 +173,22 @@ function BookingsContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Bookings</h1>
-          <p className="text-text-secondary">{total} bookings</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={exportCsv} disabled={exporting} aria-label="Export CSV">
-            <Download className="h-4 w-4 mr-2" />
-            {exporting ? 'Exporting…' : 'Export CSV'}
-          </Button>
-          <Button variant="secondary" onClick={() => load(true)} aria-label="Refresh">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Operations"
+        title="Bookings"
+        description={`${total.toLocaleString()} ${total === 1 ? 'booking' : 'bookings'}`}
+        actions={
+          <>
+            <Button variant="secondary" onClick={exportCsv} disabled={exporting} aria-label="Export CSV">
+              <Download className="h-4 w-4 mr-2" />
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </Button>
+            <Button variant="secondary" onClick={() => list.refetch()} aria-label="Refresh">
+              <RefreshCw className={`h-4 w-4 ${list.isFetching ? 'animate-spin' : ''}`} />
+            </Button>
+          </>
+        }
+      />
 
       <Card>
         <form
@@ -185,7 +205,12 @@ function BookingsContent() {
             label="Status"
             value={filters.status ?? ''}
             onChange={(e) => setFilter({ status: e.target.value || undefined })}
-            options={[{ value: '', label: 'All statuses' }, ...STATUS_OPTIONS.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))]}
+            options={[
+              { value: '', label: 'All statuses' },
+              // Dashboard cards link here with a combined filter such as "failed,rejected".
+              ...(filters.status && !STATUS_OPTIONS.includes(filters.status) ? [filters.status] : []).map((v) => ({ value: v, label: v.split(',').map((x) => x.replace(/_/g, ' ')).join(' + ') })),
+              ...STATUS_OPTIONS.map((s) => ({ value: s, label: s.replace(/_/g, ' ') })),
+            ]}
           />
           <Select
             label="Source"
@@ -193,7 +218,7 @@ function BookingsContent() {
             onChange={(e) => setFilter({ source_system: e.target.value || undefined })}
             options={[
               { value: '', label: 'All sources' },
-              ...['ai_irrops', 'ix_irrops', 'ey_class'].map((s) => ({ value: s, label: getSourceSystemLabel(s) })),
+              ...(sourceSystems ?? []).map((s) => ({ value: s.value, label: getSourceSystemLabel(s.value) })),
             ]}
           />
           <Select
@@ -223,9 +248,9 @@ function BookingsContent() {
       <Card padding="none">
         <Table columns={columns} data={bookings} isLoading={loading} keyExtractor={(b) => String(b.id)} onRowClick={openDetail} emptyMessage="No bookings match these filters" />
       </Card>
-      <Pagination currentPage={filters.page ?? 1} totalPages={Math.max(1, Math.ceil(total / LIMIT))} onPageChange={(page) => setFilters((f) => ({ ...f, page }))} />
+      <Pagination currentPage={filters.page ?? 1} totalPages={Math.max(1, Math.ceil(total / LIMIT))} onPageChange={(page) => setFilter({ page: page > 1 ? page : undefined } as Partial<BookingFilters>)} />
 
-      <Modal isOpen={!!selected} onClose={() => setSelected(null)} title={selected ? `Booking ${selected.ritmo_booking_id}` : ''} size="xl">
+      <Modal isOpen={!!selected} onClose={() => setSelectedId(null)} title={selected ? `Booking ${selected.ritmo_booking_id}` : ''} size="xl">
         {selected && <BookingDetailView booking={selected} loading={detailLoading} />}
       </Modal>
     </div>

@@ -158,3 +158,62 @@ button:active:not(:disabled) { scale: 0.97; }
   border-radius: 4px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #DCDFE4; }
+
+/* ─── Sidebar scrollbar (on navy) ───────────────────────── */
+.scrollbar-dark { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.14) transparent; }
+.scrollbar-dark::-webkit-scrollbar { width: 4px; }
+.scrollbar-dark::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 4px; }
+
+/* ─── Keyboard focus: one consistent brand ring ─────────── */
+:focus-visible { outline: 2px solid rgba(7,45,98,.45); outline-offset: 2px; border-radius: 6px; }
+aside :focus-visible { outline-color: rgba(179,150,97,.8); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
+
+/* ─── Route change ──────────────────────────────────────── */
+.page-enter { animation: pageEnter .38s cubic-bezier(.16,1,.3,1) both; }
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Staggered entrance for card grids ─────────────────── */
+.stagger > * { animation: riseIn .5s cubic-bezier(.16,1,.3,1) both; }
+.stagger > *:nth-child(5) { animation-delay: 200ms; }
+.stagger > *:nth-child(6) { animation-delay: 250ms; }
+
+/* ─── Toast countdown bar ───────────────────────────────── */
+@keyframes toastBar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.toast-bar { transform-origin: left; animation: toastBar linear forwards; }
+
+/* ─── Subtle ambient wash behind page content ───────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 85% -10%, rgba(179,150,97,.10), transparent 60%),
+    radial-gradient(800px 500px at -10% 0%, rgba(7,45,98,.05), transparent 60%);
+}
+
+/* ─── Numbers align in tables and stat cards ────────────── */
+table { font-variant-numeric: tabular-nums; }
+
+/* ─── Respect reduced-motion preferences ────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Modal panel: gentle pop, no overshoot (overshoot clips borders mid-animation) ─── */
+.modal-panel { animation: modalPop .24s cubic-bezier(.16,1,.3,1) both; }
+@keyframes modalPop {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-panel:focus-visible { outline: none; }

@@ -1,26 +1,48 @@
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import LoginPage from '@/pages/Login';
-import DashboardPage from '@/pages/Dashboard';
-import BookingsPage from '@/pages/Bookings';
-import AnalyticsPage from '@/pages/Analytics';
-import SchedulersPage from '@/pages/Schedulers';
-import PrioritiesPage from '@/pages/Priorities';
-import VendorsPage from '@/pages/Vendors';
-import TransportConfigPage from '@/pages/TransportConfig';
-import AirportsPage from '@/pages/Airports';
-import FleetPage from '@/pages/Fleet';
-import DriversPage from '@/pages/Drivers';
-import PartnersPage from '@/pages/Partners';
-import HotelsPage from '@/pages/Hotels';
-import FleetRequestsPage from '@/pages/FleetRequests';
-import JourneysPage from '@/pages/Journeys';
-import SettingsPage from '@/pages/Settings';
+import NotFoundPage from '@/pages/NotFound';
+
+// One chunk per page: recharts, the booking detail view etc. only load when visited.
+const DashboardPage = lazy(() => import('@/pages/Dashboard'));
+const BookingsPage = lazy(() => import('@/pages/Bookings'));
+const AnalyticsPage = lazy(() => import('@/pages/Analytics'));
+const SchedulersPage = lazy(() => import('@/pages/Schedulers'));
+const PrioritiesPage = lazy(() => import('@/pages/Priorities'));
+const VendorsPage = lazy(() => import('@/pages/Vendors'));
+const TransportConfigPage = lazy(() => import('@/pages/TransportConfig'));
+const AirportsPage = lazy(() => import('@/pages/Airports'));
+const FleetPage = lazy(() => import('@/pages/Fleet'));
+const DriversPage = lazy(() => import('@/pages/Drivers'));
+const PartnersPage = lazy(() => import('@/pages/Partners'));
+const HotelsPage = lazy(() => import('@/pages/Hotels'));
+const FleetRequestsPage = lazy(() => import('@/pages/FleetRequests'));
+const JourneysPage = lazy(() => import('@/pages/Journeys'));
+const SettingsPage = lazy(() => import('@/pages/Settings'));
+
+function PageFallback() {
+  return (
+    <div className="space-y-4 animate-pulse" aria-busy="true" aria-label="Loading page">
+      <div className="h-8 w-56 skeleton rounded-lg" />
+      <div className="h-4 w-80 skeleton rounded" />
+      <div className="h-64 skeleton rounded-2xl" />
+    </div>
+  );
+}
 
 function AppLayout() {
+  const { pathname } = useLocation();
   return (
     <Layout>
-      <Outlet />
+      <ErrorBoundary resetKey={pathname}>
+        <Suspense fallback={<PageFallback />}>
+          <div key={pathname} className="page-enter">
+            <Outlet />
+          </div>
+        </Suspense>
+      </ErrorBoundary>
     </Layout>
   );
 }
@@ -32,7 +54,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<AppLayout />}>
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/" element={<Navigate to="/priorities" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/bookings" element={<BookingsPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/schedulers" element={<SchedulersPage />} />
@@ -47,8 +70,8 @@ export default function App() {
         <Route path="/fleet-requests" element={<FleetRequestsPage />} />
         <Route path="/journeys" element={<JourneysPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

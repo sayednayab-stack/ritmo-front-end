@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Sprout } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { queryKeys } from '@/lib/queries';
 import { Table, Column } from '@/components/ui/Table';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Badge } from '@/components/ui/Badge';
@@ -45,10 +49,9 @@ const num = (s: string) => (s.trim() === '' ? null : Number(s));
 
 export default function TransportConfigPage() {
   const { addToast } = useToast();
-  const [rows, setRows] = useState<TransportConfig[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [showInactive, setShowInactive] = useState(true);
+  const queryClient = useQueryClient();
+  const [confirmSeed, setConfirmSeed] = useState(false);
   const [editing, setEditing] = useState<TransportConfig | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Form>(EMPTY);
@@ -56,22 +59,14 @@ export default function TransportConfigPage() {
   const [saving, setSaving] = useState(false);
   const [toDelete, setToDelete] = useState<TransportConfig | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await transportConfigApi.list({ active_only: !showInactive });
-      setRows(res.data);
-    } catch (e) {
-      setError(errorMessage(e, 'Failed to load transport configuration'));
-    } finally {
-      setLoading(false);
-    }
-  }, [showInactive]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const listQuery = useQuery({
+    queryKey: [...queryKeys.transportConfig, showInactive],
+    queryFn: () => transportConfigApi.list({ active_only: !showInactive }).then((r) => r.data),
+  });
+  const rows: TransportConfig[] = listQuery.data ?? [];
+  const loading = listQuery.isLoading;
+  const error = listQuery.isError ? errorMessage(listQuery.error, 'Failed to load transport configuration') : '';
+  const load = () => queryClient.invalidateQueries({ queryKey: queryKeys.transportConfig });
 
   const openCreate = () => {
     setEditing(null);
@@ -147,7 +142,7 @@ export default function TransportConfigPage() {
   };
 
   const seed = async () => {
-    if (!window.confirm('Seed the default transport configuration? This only works while the table is empty.')) return;
+    setConfirmSeed(false);
     try {
       await transportConfigApi.seed();
       addToast({ type: 'success', title: 'Defaults seeded' });
@@ -199,22 +194,23 @@ export default function TransportConfigPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Transport Config</h1>
-          <p className="text-text-secondary">Vehicle allocation rules per flight class and channel manager</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={seed}>
-            <Sprout className="h-4 w-4 mr-2" />
-            Seed defaults
-          </Button>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add configuration
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Routing"
+        title="Transport Config"
+        description="Vehicle allocation rules per flight class and channel manager"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmSeed(true)}>
+              <Sprout className="h-4 w-4 mr-2" />
+              Seed defaults
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add configuration
+            </Button>
+          </>
+        }
+      />
 
       <label className="flex items-center gap-2 text-sm text-text-primary">
         <input type="checkbox" className="h-4 w-4 rounded border-border" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
@@ -290,6 +286,15 @@ export default function TransportConfigPage() {
           </Button>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmSeed}
+        title="Seed defaults"
+        message="Seed the default transport configuration? This only works while the table is empty."
+        confirmLabel="Seed"
+        onCancel={() => setConfirmSeed(false)}
+        onConfirm={seed}
+      />
     </div>
   );
 }

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Play, Pause, RotateCcw, Zap, Database } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/components/ui/Toast';
 import { schedulerApi, errorMessage } from '@/lib/api';
+import { useSchedulerStatus } from '@/lib/queries';
 import { formatDateTime, cn } from '@/lib/utils';
 import type { JobStatus, SchedulerStatus } from '@/types';
 
@@ -28,27 +30,18 @@ const JOBS: { key: keyof SchedulerStatus; job: Job; name: string; icon: React.Re
 ];
 
 export default function SchedulersPage() {
-  const [status, setStatus] = useState<SchedulerStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Polls every 30s; TanStack Query pauses polling while the tab is hidden.
+  const statusQuery = useSchedulerStatus();
+  const status = statusQuery.data ?? null;
+  const loading = statusQuery.isLoading;
   const [busy, setBusy] = useState<string | null>(null);
   const { addToast } = useToast();
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await schedulerApi.getStatus();
-      setStatus(res.data);
-    } catch (e) {
-      addToast({ type: 'error', title: 'Failed to load scheduler status', message: errorMessage(e) });
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
+  const fetchStatus = () => statusQuery.refetch();
 
   useEffect(() => {
-    fetchStatus();
-    const t = setInterval(fetchStatus, 30000);
-    return () => clearInterval(t);
-  }, [fetchStatus]);
+    if (statusQuery.error) addToast({ type: 'error', title: 'Failed to load scheduler status', message: errorMessage(statusQuery.error) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusQuery.error]);
 
   const act = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label);
@@ -121,16 +114,17 @@ export default function SchedulersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Schedulers</h1>
-          <p className="text-text-secondary">Monitor and control background jobs</p>
-        </div>
-        <Button variant="secondary" onClick={fetchStatus}>
-          <RotateCcw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Operations"
+        title="Schedulers"
+        description="Monitor and control background jobs"
+        actions={
+          <Button variant="secondary" onClick={fetchStatus}>
+            <RotateCcw className={cn('h-4 w-4 mr-2', statusQuery.isFetching && 'animate-spin')} />
+            Refresh
+          </Button>
+        }
+      />
 
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2">

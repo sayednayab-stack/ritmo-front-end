@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -52,20 +53,21 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Analytics</h1>
-          <p className="text-text-secondary">Booking volume and outcomes (active bookings)</p>
-        </div>
-        <div className="w-40">
-          <Select
-            label="Volume window"
-            value={String(days)}
-            onChange={(e) => setDays(Number(e.target.value))}
-            options={[7, 14, 30, 90].map((d) => ({ value: String(d), label: `Last ${d} days` }))}
-          />
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Operations"
+        title="Analytics"
+        description="Booking volume and outcomes (active bookings)"
+        actions={
+          <div className="w-40">
+            <Select
+              aria-label="Volume window"
+              value={String(days)}
+              onChange={(e) => setDays(Number(e.target.value))}
+              options={[7, 14, 30, 90].map((d) => ({ value: String(d), label: `Last ${d} days` }))}
+            />
+          </div>
+        }
+      />
 
       {error && (
         <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700" role="alert">

@@ -1,43 +1,33 @@
-import { useEffect, useState } from 'react';
-import api, { errorMessage, priorityApi } from '@/lib/api';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { useEffect } from 'react';
+import { errorMessage } from '@/lib/api';
+import { useMe, useSourceSystems, useVehicleMappings } from '@/lib/queries';
+import type { SourceSystemInfo, VehicleTypeMapping } from '@/types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Table } from '@/components/ui/Table';
 import { useToast } from '@/components/ui/Toast';
 import { getCMProviderLabel, getSourceSystemLabel } from '@/lib/utils';
-import type { SourceSystemInfo, VehicleTypeMapping } from '@/types';
-
-interface Me {
-  username: string;
-  email: string;
-  is_admin: boolean;
-  is_active: boolean;
-}
 
 export default function SettingsPage() {
-  const [me, setMe] = useState<Me | null>(null);
-  const [systems, setSystems] = useState<SourceSystemInfo[]>([]);
-  const [mappings, setMappings] = useState<VehicleTypeMapping[]>([]);
-  const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
+  const meQuery = useMe();
+  const systemsQuery = useSourceSystems();
+  const mappingsQuery = useVehicleMappings();
+  const me = meQuery.data ?? null;
+  const systems = systemsQuery.data ?? [];
+  const mappings = mappingsQuery.data ?? [];
+  const loading = meQuery.isLoading || systemsQuery.isLoading || mappingsQuery.isLoading;
+  const error = meQuery.error ?? systemsQuery.error ?? mappingsQuery.error;
 
   useEffect(() => {
-    Promise.all([api.get<Me>('/auth/me'), priorityApi.sourceSystems(), priorityApi.vehicleMappings()])
-      .then(([m, s, v]) => {
-        setMe(m.data);
-        setSystems(s.data);
-        setMappings(v.data);
-      })
-      .catch((e) => addToast({ type: 'error', title: 'Failed to load settings', message: errorMessage(e) }))
-      .finally(() => setLoading(false));
-  }, [addToast]);
+    if (error) addToast({ type: 'error', title: 'Failed to load settings', message: errorMessage(error) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Settings</h1>
-        <p className="text-text-secondary">Your account and read-only routing reference data</p>
-      </div>
+      <PageHeader eyebrow="Account" title="Settings" description="Your account and read-only routing reference data" />
 
       <Card>
         <CardHeader>

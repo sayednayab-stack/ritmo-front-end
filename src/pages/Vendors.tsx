@@ -2,6 +2,7 @@ import { ResourcePage, FieldDef } from '@/components/resource/ResourcePage';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Vendor } from '@/types';
 import { getCMProviderLabel } from '@/lib/utils';
+import { CM_PROVIDER_OPTIONS } from '@/lib/providers';
 
 const fields: FieldDef[] = [
   { key: 'code', label: 'Code', required: true, createOnly: true, help: "The identifier the CM assigned (e.g. RIDE's tenant_code)" },
@@ -11,14 +12,10 @@ const fields: FieldDef[] = [
     label: 'CM provider',
     type: 'select',
     required: true,
-    options: [
-      { value: 'ride', label: 'RIDE' },
-      { value: 'iway', label: 'iWay' },
-      { value: 'safetrax', label: 'Safetrax' },
-    ],
+    options: CM_PROVIDER_OPTIONS,
   },
   { key: 'description', label: 'Description', type: 'textarea' },
-  { key: 'is_active', label: 'Active', type: 'checkbox' },
+  { key: 'is_active', label: 'Active', type: 'checkbox', defaultValue: true },
 ];
 
 export default function VendorsPage() {
@@ -28,6 +25,7 @@ export default function VendorsPage() {
       description="Vendors registered with each channel manager; referenced by priority rules"
       noun="Vendor"
       endpoint="/vendors"
+      emptyHint="Register the vendor record each channel manager assigned to you, then reference it from a priority rule."
       updateMethod="patch"
       fields={fields}
       columns={[

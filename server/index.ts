@@ -9,6 +9,9 @@ import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { classifyAuthFailure, isAllowedPath, jwtExpiry, parseCookie } from './lib';
 
 dotenv.config({ path: '.env.local' });
 
@@ -19,14 +22,6 @@ const PORT = Number(process.env.PORT) || 3003;
 const BACKEND_URL = (process.env.BACKEND_URL || 'http://localhost:8000').replace(/\/$/, '');
 const TOKEN_COOKIE = 'ritmo_token';
 
-// Only these backend areas are reachable through the proxy. Webhooks, /auth/register,
-// /auth/users etc. are deliberately not exposed to the browser.
-const ALLOWED_PREFIXES = [
-  'admin', 'airports', 'transport-config', 'iway', 'vendors', 'fleet', 'drivers',
-  'partners', 'hotels', 'fleet_requests', 'journeys', 'auth/me',
-];
-const isAllowedPath = (p: string) => ALLOWED_PREFIXES.some((x) => p === x || p.startsWith(`${x}/`));
-
 function backendHeaders(token?: string): Record<string, string> {
   const headers: Record<string, string> = {};
   if (process.env.EXTERNAL_API_KEY) headers['X-Api-Key'] = process.env.EXTERNAL_API_KEY;
@@ -35,34 +30,55 @@ function backendHeaders(token?: string): Record<string, string> {
   return headers;
 }
 
-/** exp (seconds since epoch) from a JWT, without verifying it. */
-function jwtExpiry(token: string): number | null {
-  try {
-    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
-    return typeof payload.exp === 'number' ? payload.exp : null;
-  } catch {
-    return null;
-  }
-}
-
-function readCookie(req: Request, name: string): string | undefined {
-  for (const part of (req.headers.cookie || '').split(';')) {
-    const i = part.indexOf('=');
-    if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
-  }
-  return undefined;
-}
+const readCookie = (req: Request, name: string) => parseCookie(req.headers.cookie, name);
 
 function setSessionCookie(req: Request, res: Response, token: string, maxAge: number) {
   const secure = isProd && (req.secure || req.headers['x-forwarded-proto'] === 'https');
   res.cookie(TOKEN_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure, path: '/', maxAge: maxAge * 1000 });
 }
 
+if (!process.env.EXTERNAL_API_KEY) {
+  console.warn('[config] EXTERNAL_API_KEY is empty: most backend routes will reject requests. Set it in .env.local.');
+}
+
 const app = express();
 app.disable('x-powered-by');
+if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : process.env.TRUST_PROXY);
+
+// Security headers. The CSP is production-only: the Vite dev server needs inline scripts
+// and a websocket for HMR. Google Fonts is the only third-party origin the app uses.
+app.use(
+  helmet({
+    contentSecurityPolicy: isProd
+      ? {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+            fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+            imgSrc: ["'self'", 'data:'],
+            connectSrc: ["'self'"],
+            frameAncestors: ["'none'"],
+            objectSrc: ["'none'"],
+          },
+        }
+      : false,
+    hsts: isProd,
+  })
+);
+
+// Brute-force protection for the only unauthenticated write endpoint.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.LOGIN_RATE_LIMIT) || 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { detail: 'Too many failed login attempts. Try again in a few minutes.' },
+});
 
 // ── Auth ────────────────────────────────────────────────────────
-app.post('/api/auth/login', express.json(), async (req, res) => {
+app.post('/api/auth/login', loginLimiter, express.json(), async (req, res) => {
   const { username, password } = req.body ?? {};
   if (!username || !password) {
     return res.status(422).json({ detail: 'Username and password are required' });
@@ -91,15 +107,50 @@ app.post('/api/auth/login', express.json(), async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/auth/logout', (_req, res) => {
+app.post('/api/auth/logout', (req, res) => {
+  const token = readCookie(req, TOKEN_COOKIE);
+  if (token) verifiedTokens.delete(token);
   res.clearCookie(TOKEN_COOKIE, { path: '/' });
   res.json({ ok: true });
 });
+
+// ── Session check ───────────────────────────────────────────────
+// A cookie that merely *exists* proves nothing: most backend routes only need the API key this
+// proxy adds. So the JWT is confirmed with the backend, and a positive answer is remembered
+// briefly (never past the token's own expiry) to avoid one extra call per request.
+const SESSION_TTL_MS = 30_000;
+const verifiedTokens = new Map<string, number>();
+
+async function verifySession(token: string): Promise<'ok' | 'invalid' | 'unreachable'> {
+  const now = Date.now();
+  const cached = verifiedTokens.get(token);
+  if (cached && cached > now) return 'ok';
+  verifiedTokens.delete(token);
+  try {
+    const r = await fetch(`${BACKEND_URL}/auth/me`, { headers: backendHeaders(token) });
+    if (r.status === 401 || r.status === 403) return 'invalid';
+    if (!r.ok) return 'unreachable';
+    const exp = jwtExpiry(token);
+    const until = Math.min(now + SESSION_TTL_MS, exp ? exp * 1000 : Infinity);
+    if (verifiedTokens.size > 500) verifiedTokens.clear();
+    verifiedTokens.set(token, until);
+    return 'ok';
+  } catch {
+    return 'unreachable';
+  }
+}
 
 // ── Backend proxy ───────────────────────────────────────────────
 app.all('/api/backend/*', express.raw({ type: () => true, limit: '25mb' }), async (req, res) => {
   const token = readCookie(req, TOKEN_COOKIE);
   if (!token) return res.status(401).json({ detail: 'Not authenticated' });
+
+  const session = await verifySession(token);
+  if (session === 'invalid') {
+    res.clearCookie(TOKEN_COOKIE, { path: '/' });
+    return res.status(401).json({ detail: 'Not authenticated' });
+  }
+  if (session === 'unreachable') return res.status(502).json({ detail: 'Backend is unreachable' });
 
   const backendPath = (req.params as Record<string, string>)[0];
   if (!isAllowedPath(backendPath)) return res.status(404).json({ detail: 'Not found' });
@@ -131,17 +182,27 @@ app.all('/api/backend/*', express.raw({ type: () => true, limit: '25mb' }), asyn
   }
   if (!upstream) return res.status(502).json({ detail: 'Backend is unreachable' });
 
-  res.status(upstream.status);
   const upstreamType = upstream.headers.get('content-type');
+  const payload = Buffer.from(await upstream.arrayBuffer());
+
+  // Credential problems are translated so a bad API key never logs the user out.
+  if ([401, 422].includes(upstream.status) && upstreamType?.includes('json')) {
+    let parsed: unknown;
+    try { parsed = JSON.parse(payload.toString()); } catch { /* not JSON */ }
+    const failure = classifyAuthFailure(upstream.status, parsed);
+    if (failure) {
+      if (failure.endSession) res.clearCookie(TOKEN_COOKIE, { path: '/' });
+      else console.error('[proxy]', failure.detail, `(${req.method} /${backendPath})`);
+      return res.status(failure.status).json({ detail: failure.detail });
+    }
+  }
+
+  res.status(upstream.status);
   if (upstreamType) res.setHeader('Content-Type', upstreamType);
   const disposition = upstream.headers.get('content-disposition');
   if (disposition) res.setHeader('Content-Disposition', disposition);
-
-  // The backend rejecting our JWT means the session is over.
-  if (upstream.status === 401) res.clearCookie(TOKEN_COOKIE, { path: '/' });
-
   if (upstream.status === 204) return res.end();
-  res.end(Buffer.from(await upstream.arrayBuffer()));
+  res.end(payload);
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ detail: 'Not found' }));

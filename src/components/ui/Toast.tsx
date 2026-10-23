@@ -58,7 +58,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
         <div
           key={t.id}
           className={cn(
-            'pointer-events-auto relative flex items-start gap-3 px-4 py-3.5 rounded-xl',
+            'toast pointer-events-auto relative flex items-start gap-3 px-4 py-3.5 rounded-xl',
             'bg-ops-card border border-border shadow-lift ring-4 overflow-hidden',
             cfg[t.type].ring,
             'animate-slide-up'
@@ -76,11 +76,12 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
           >
             <X className="h-3.5 w-3.5" />
           </button>
-          <div className={cn('absolute bottom-0 left-0 right-0 h-[2px]', cfg[t.type].bar, 'opacity-40')} />
+          {t.duration !== 0 && (
+            <div className={cn('toast-bar absolute bottom-0 left-0 right-0 h-[2px]', cfg[t.type].bar, 'opacity-50')} style={{ animationDuration: `${t.duration ?? 4500}ms` }} />
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-export function toast() { return useToast(); }

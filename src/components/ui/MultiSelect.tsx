@@ -23,7 +23,7 @@ interface MultiSelectProps {
 }
 
 export const MultiSelect = forwardRef<HTMLDivElement, MultiSelectProps>(
-  ({ label, options, value, onChange, placeholder = 'Select options...', error, helperText, disabled, searchable = true, maxSelected, id, ...props }, ref) => {
+  ({ label, options, value, onChange, placeholder = 'Select options...', error, helperText, disabled, searchable = true, maxSelected, id, ...props }, _ref) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);

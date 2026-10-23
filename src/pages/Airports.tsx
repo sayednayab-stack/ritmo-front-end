@@ -1,19 +1,25 @@
-import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/Card';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent, CardFooter } from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Table, Column } from '@/components/ui/Table';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { queryKeys, useAirports } from '@/lib/queries';
 import { airportApi, errorMessage } from '@/lib/api';
-import type { CreateAirportRequest, UpdateAirportRequest } from '@/types';
-import { Plus, Edit, Trash2, Loader2, Save, X, Upload, Download, Search, Filter } from 'lucide-react';
+import type { CreateAirportRequest } from '@/types';
+import { Plus, Edit, Trash2, Loader2, Save, Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 
 export default function AirportsPage() {
-  const [airports, setAirports] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const airportsQuery = useAirports();
+  const airports: any[] = airportsQuery.data ?? [];
+  const isLoading = airportsQuery.isLoading;
+  const queryClient = useQueryClient();
+  const [airportToDeactivate, setAirportToDeactivate] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAirport, setEditingAirport] = useState<any>(null);
   const [formData, setFormData] = useState<CreateAirportRequest>({
@@ -28,24 +34,9 @@ export default function AirportsPage() {
     is_active: true,
   });
   const [formErrors, setFormErrors] = useState<Partial<CreateAirportRequest>>({});
-  const [fileUpload, setFileUpload] = useState<File | null>(null);
   const { addToast } = useToast();
 
-  useEffect(() => {
-    fetchAirports();
-  }, []);
-
-  const fetchAirports = async () => {
-    try {
-      const response = await airportApi.list({ active_only: false });
-      setAirports(response.data || []);
-    } catch (error) {
-      console.error('Failed to fetch airports:', error);
-      addToast({ type: 'error', title: 'Failed to load airports' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const fetchAirports = () => queryClient.invalidateQueries({ queryKey: queryKeys.airports });
 
   const handleOpenModal = (airport?: any) => {
     if (airport) {
@@ -122,15 +113,18 @@ export default function AirportsPage() {
     }
   };
 
-  const handleDelete = async (airport: any) => {
-    if (!window.confirm(`Deactivate airport ${airport.iata_code}?`)) return;
-    
+  const handleDelete = (airport: any) => setAirportToDeactivate(airport);
+
+  const confirmDeactivate = async () => {
+    const airport = airportToDeactivate;
+    setAirportToDeactivate(null);
+    if (!airport) return;
     try {
       await airportApi.delete(airport.iata_code);
       addToast({ type: 'success', title: 'Airport deactivated' });
       fetchAirports();
     } catch (error) {
-      addToast({ type: 'error', title: 'Failed to deactivate airport' });
+      addToast({ type: 'error', title: 'Failed to deactivate airport', message: errorMessage(error) });
     }
   };
 
@@ -138,7 +132,6 @@ export default function AirportsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setFileUpload(file);
     try {
       const response = await airportApi.bulkUpload(file);
       addToast({ 
@@ -150,7 +143,6 @@ export default function AirportsPage() {
       const axiosError = error as { response?: { data?: { detail?: string } } };
       addToast({ type: 'error', title: axiosError.response?.data?.detail || 'Upload failed' });
     } finally {
-      setFileUpload(null);
       e.target.value = '';
     }
   };
@@ -227,29 +219,30 @@ export default function AirportsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Airports</h1>
-          <p className="text-text-secondary">Manage airport master data for transport bookings</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => document.getElementById('file-upload')?.click()}>
-            <Upload className="h-4 w-4 mr-2" />
-            Bulk Upload
-          </Button>
-          <input
-            id="file-upload"
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <Button onClick={() => handleOpenModal()}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Airport
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Routing"
+        title="Airports"
+        description="Manage airport master data for transport bookings"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => document.getElementById('file-upload')?.click()}>
+              <Upload className="h-4 w-4 mr-2" />
+              Bulk Upload
+            </Button>
+            <input
+              id="file-upload"
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button onClick={() => handleOpenModal()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Airport
+            </Button>
+          </>
+        }
+      />
 
       <Card>
         <CardContent className="p-0">
@@ -374,6 +367,15 @@ export default function AirportsPage() {
           </CardFooter>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={!!airportToDeactivate}
+        title="Deactivate airport"
+        message={`Deactivate airport ${airportToDeactivate?.iata_code ?? ''}? It will no longer be offered for new bookings.`}
+        confirmLabel="Deactivate"
+        danger
+        onCancel={() => setAirportToDeactivate(null)}
+        onConfirm={confirmDeactivate}
+      />
     </div>
   );
 }

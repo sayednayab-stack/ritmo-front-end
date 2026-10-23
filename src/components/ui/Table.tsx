@@ -17,6 +17,8 @@ interface TableProps<T> extends HTMLAttributes<HTMLTableElement> {
   keyExtractor: (row: T) => string;
   isLoading?: boolean;
   emptyMessage?: string;
+  /** Replaces the default empty state (e.g. with a call to action). */
+  emptyContent?: React.ReactNode;
   onRowClick?: (row: T) => void;
   striped?: boolean;
   hoverable?: boolean;
@@ -24,20 +26,20 @@ interface TableProps<T> extends HTMLAttributes<HTMLTableElement> {
 
 export function Table<T>({
   columns, data, keyExtractor,
-  isLoading, emptyMessage = 'No data available',
+  isLoading, emptyMessage = 'No data available', emptyContent,
   onRowClick, striped = false, hoverable = true,
   className, ...props
 }: TableProps<T>) {
   return (
     <div className="overflow-x-auto scrollbar-thin">
       <table className={cn('w-full text-sm', className)} {...props}>
-        <thead className="bg-ops-card2 border-b border-border sticky top-0">
+        <thead className="bg-ops-card2/90 backdrop-blur border-b border-border sticky top-0 z-[1]">
           <tr>
             {columns.map((col) => (
               <th
                 key={col.key}
                 className={cn(
-                  'px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-text-secondary',
+                  'px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.12em] font-mono text-text-tertiary whitespace-nowrap',
                   col.className
                 )}
                 scope="col"
@@ -47,7 +49,7 @@ export function Table<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-ops-line bg-ops-card">
+        <tbody className="divide-y divide-ops-line/70 bg-ops-card">
           {isLoading ? (
             Array.from({ length: 6 }).map((_, i) => (
               <tr key={i}>
@@ -61,17 +63,19 @@ export function Table<T>({
           ) : data.length === 0 ? (
             <tr>
               <td colSpan={columns.length}>
-                <div className="flex flex-col items-center justify-center py-14 gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-ops-card2 flex items-center justify-center">
-                    <Inbox className="h-5 w-5 text-text-tertiary" />
+                {emptyContent ?? (
+                  <div className="flex flex-col items-center justify-center py-14 gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-ops-card2 flex items-center justify-center">
+                      <Inbox className="h-5 w-5 text-text-tertiary" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-text-secondary">No results</p>
+                      {emptyMessage !== 'No data available' && (
+                        <p className="text-xs text-text-tertiary mt-0.5">{emptyMessage}</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-text-secondary">No results</p>
-                    {emptyMessage !== 'No data available' && (
-                      <p className="text-xs text-text-tertiary mt-0.5">{emptyMessage}</p>
-                    )}
-                  </div>
-                </div>
+                )}
               </td>
             </tr>
           ) : (
@@ -80,11 +84,21 @@ export function Table<T>({
                 key={keyExtractor(row)}
                 className={cn(
                   'transition-colors duration-100',
-                  hoverable && 'hover:bg-ops-bg',
+                  hoverable && 'hover:bg-navy-soft/40',
                   striped && idx % 2 === 1 && 'bg-ops-bg/40',
-                  onRowClick && 'cursor-pointer'
+                  onRowClick && 'cursor-pointer focus:outline-none focus-visible:bg-ops-bg focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-blue/30'
                 )}
                 onClick={() => onRowClick?.(row)}
+                {...(onRowClick && {
+                  tabIndex: 0,
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.target !== e.currentTarget) return; // ignore keys typed in nested buttons/inputs
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onRowClick(row);
+                    }
+                  },
+                })}
               >
                 {columns.map((col) => (
                   <td key={col.key} className={cn('px-4 py-3.5 text-text-primary', col.className)}>

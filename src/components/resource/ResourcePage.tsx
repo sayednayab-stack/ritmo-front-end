@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Pencil, Trash2, RefreshCw, Inbox } from 'lucide-react';
 import api, { errorMessage } from '@/lib/api';
+import { queryKeys } from '@/lib/queries';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input, Select, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Table, Column } from '@/components/ui/Table';
@@ -16,20 +20,30 @@ export interface FieldDef {
   placeholder?: string;
   options?: { value: string; label: string }[];
   /** Load select options from another list endpoint. */
-  optionsFrom?: { endpoint: string; value: string; label: (row: any) => string };
+  optionsFrom?: {
+    endpoint: string;
+    value: string;
+    label: (row: any) => string;
+    /** Keep only some rows, optionally depending on the rest of the form (e.g. vendors of the chosen CM). */
+    filter?: (row: any, form: Record<string, any>) => boolean;
+  };
+  /** Initial value on the Add form (checkboxes otherwise start unchecked). */
+  defaultValue?: string | number | boolean;
   /** Only editable when creating (e.g. immutable foreign keys). */
   createOnly?: boolean;
   step?: string;
   help?: string;
   /** Rendered as a password input; blank on edit means "leave unchanged". */
   secret?: boolean;
+  /** Other field keys to clear when this field changes (e.g. picking a CM clears the vendor). */
+  resetOnChange?: string[];
 }
 
 export interface RowAction<T> {
   label: string;
   icon?: React.ReactNode;
   show?: (row: T) => boolean;
-  /** Return the endpoint (relative to the proxy) to PATCH/POST, or handle it yourself. */
+  /** Run the action against the backend; the list is refreshed afterwards. */
   run: (row: T) => Promise<unknown>;
   confirm?: string;
 }
@@ -50,7 +64,11 @@ interface Props<T extends { id: number | string }> {
   rowActions?: RowAction<T>[];
   /** Editing sends only fields the backend's Update schema accepts. */
   editableKeys?: string[];
+  /** One line shown in the empty state to explain what a first entry is for. */
+  emptyHint?: string;
 }
+
+type Option = { value: string; label: string };
 
 function toDatetimeLocal(v: string | null | undefined): string {
   if (!v) return '';
@@ -74,60 +92,52 @@ export function ResourcePage<T extends { id: number | string }>({
   updateMethod = 'put',
   rowActions = [],
   editableKeys,
+  emptyHint,
 }: Props<T>) {
   const { addToast } = useToast();
-  const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const queryClient = useQueryClient();
+
   const [editing, setEditing] = useState<T | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Record<string, any>>({});
-  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [toDelete, setToDelete] = useState<T | null>(null);
-  const [pendingConfirm, setPendingConfirm] = useState<{ action: RowAction<T>; row: T; message: string } | null>(null);
-  const [dynamicOptions, setDynamicOptions] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [pendingConfirm, setPendingConfirm] = useState<{ action: RowAction<T>; row: T } | null>(null);
 
   const base = endpoint.replace(/\/$/, '');
+  const params = useMemo(() => ({ limit: 500, ...listParams }), [listParams]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
-    try {
-      const res = await api.get<T[]>(endpoint, { params: { limit: 500, ...listParams } });
-      setRows(res.data);
-    } catch (e) {
-      setLoadError(errorMessage(e, `Failed to load ${noun}s`));
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint, noun, JSON.stringify(listParams)]);
+  const list = useQuery({
+    queryKey: queryKeys.list(endpoint, params),
+    queryFn: () => api.get<T[]>(endpoint, { params }).then((r) => r.data),
+  });
+  const rows = list.data ?? [];
+  const refreshList = () => queryClient.invalidateQueries({ queryKey: queryKeys.listAll(endpoint) });
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Select options that come from another endpoint are cached and shared across pages.
+  const remoteFields = fields.filter((f) => f.optionsFrom);
+  const remoteResults = useQueries({
+    queries: remoteFields.map((f) => ({
+      queryKey: queryKeys.list(f.optionsFrom!.endpoint, { limit: 500 }),
+      queryFn: () => api.get<any[]>(f.optionsFrom!.endpoint, { params: { limit: 500 } }).then((r) => r.data),
+      staleTime: 60_000,
+    })),
+  });
+  const remoteRows = (key: string): any[] => remoteResults[remoteFields.findIndex((f) => f.key === key)]?.data ?? [];
 
-  useEffect(() => {
-    fields.forEach(async (f) => {
-      if (!f.optionsFrom) return;
-      try {
-        const res = await api.get<any[]>(f.optionsFrom.endpoint, { params: { limit: 500 } });
-        setDynamicOptions((prev) => ({
-          ...prev,
-          [f.key]: res.data.map((r) => ({ value: String(r[f.optionsFrom!.value]), label: f.optionsFrom!.label(r) })),
-        }));
-      } catch {
-        /* the select just stays empty */
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const optionsFor = (fd: FieldDef): Option[] => {
+    if (fd.options) return fd.options;
+    if (!fd.optionsFrom) return [];
+    const { value, label, filter } = fd.optionsFrom;
+    return remoteRows(fd.key)
+      .filter((r) => !filter || filter(r, form))
+      .map((r) => ({ value: String(r[value]), label: label(r) }));
+  };
 
   const emptyForm = useMemo(() => {
     const f: Record<string, any> = {};
     fields.forEach((fd) => {
-      f[fd.key] = fd.type === 'checkbox' ? false : fd.type === 'select' && fd.options ? fd.options[0]?.value ?? '' : '';
+      f[fd.key] = fd.defaultValue !== undefined ? fd.defaultValue : fd.type === 'checkbox' ? false : fd.type === 'select' && fd.options ? fd.options[0]?.value ?? '' : '';
     });
     return f;
   }, [fields]);
@@ -169,7 +179,37 @@ export function ResourcePage<T extends { id: number | string }>({
     return payload;
   };
 
-  const save = async (e: React.FormEvent) => {
+  const saveMutation = useMutation({
+    mutationFn: (payload: Record<string, any>) =>
+      editing ? api[updateMethod](`${base}/${editing.id}`, payload) : api.post(endpoint, payload),
+    onSuccess: () => {
+      addToast({ type: 'success', title: `${noun} ${editing ? 'updated' : 'created'}` });
+      setOpen(false);
+      refreshList();
+    },
+    onError: (err) => setFormError(errorMessage(err, `Failed to save ${noun}`)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (row: T) => api.delete(`${base}/${row.id}`),
+    onSuccess: () => {
+      addToast({ type: 'success', title: `${noun} deleted` });
+      setToDelete(null);
+      refreshList();
+    },
+    onError: (err) => addToast({ type: 'error', title: `Failed to delete ${noun}`, message: errorMessage(err) }),
+  });
+
+  const actionMutation = useMutation({
+    mutationFn: ({ action, row }: { action: RowAction<T>; row: T }) => action.run(row),
+    onSuccess: (_d, { action }) => {
+      addToast({ type: 'success', title: `${action.label} done` });
+      refreshList();
+    },
+    onError: (err, { action }) => addToast({ type: 'error', title: `${action.label} failed`, message: errorMessage(err) }),
+  });
+
+  const save = (e: React.FormEvent) => {
     e.preventDefault();
     const missing = fields.find(
       (fd) => fd.required && !(editing && fd.createOnly) && (form[fd.key] === '' || form[fd.key] == null)
@@ -178,53 +218,13 @@ export function ResourcePage<T extends { id: number | string }>({
       setFormError(`${missing.label} is required`);
       return;
     }
-    setSaving(true);
     setFormError('');
-    try {
-      const payload = buildPayload();
-      if (editing) await api[updateMethod](`${base}/${editing.id}`, payload);
-      else await api.post(endpoint, payload);
-      addToast({ type: 'success', title: `${noun} ${editing ? 'updated' : 'created'}` });
-      setOpen(false);
-      load();
-    } catch (err) {
-      setFormError(errorMessage(err, `Failed to save ${noun}`));
-    } finally {
-      setSaving(false);
-    }
+    saveMutation.mutate(buildPayload());
   };
 
-  const remove = async () => {
-    if (!toDelete) return;
-    setSaving(true);
-    try {
-      await api.delete(`${base}/${toDelete.id}`);
-      addToast({ type: 'success', title: `${noun} deleted` });
-      setToDelete(null);
-      load();
-    } catch (err) {
-      addToast({ type: 'error', title: `Failed to delete ${noun}`, message: errorMessage(err) });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const runAction = async (action: RowAction<T>, row: T) => {
-    if (action.confirm) {
-      setPendingConfirm({ action, row, message: action.confirm });
-      return;
-    }
-    await executeAction(action, row);
-  };
-
-  const executeAction = async (action: RowAction<T>, row: T) => {
-    try {
-      await action.run(row);
-      addToast({ type: 'success', title: `${action.label} done` });
-      load();
-    } catch (err) {
-      addToast({ type: 'error', title: `${action.label} failed`, message: errorMessage(err) });
-    }
+  const runAction = (action: RowAction<T>, row: T) => {
+    if (action.confirm) setPendingConfirm({ action, row });
+    else actionMutation.mutate({ action, row });
   };
 
   const tableColumns: Column<T>[] = [
@@ -268,29 +268,47 @@ export function ResourcePage<T extends { id: number | string }>({
       : []),
   ];
 
+  const emptyState = (
+    <div className="flex flex-col items-center justify-center py-14 gap-3">
+      <div className="w-12 h-12 rounded-xl bg-ops-card2 flex items-center justify-center">
+        <Inbox className="h-5 w-5 text-text-tertiary" />
+      </div>
+      <div className="text-center max-w-sm">
+        <p className="text-sm font-medium text-text-secondary">No {noun.toLowerCase()}s yet</p>
+        {emptyHint && <p className="text-xs text-text-tertiary mt-1">{emptyHint}</p>}
+      </div>
+      {canCreate && (
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add the first {noun.toLowerCase()}
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">{title}</h1>
-          <p className="text-text-secondary">{description}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={load} aria-label="Refresh">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          {canCreate && (
-            <Button onClick={openCreate}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add {noun}
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => list.refetch()} loading={list.isFetching && !list.isLoading} aria-label="Refresh">
+              <RefreshCw className="h-4 w-4" />
             </Button>
-          )}
-        </div>
-      </div>
+            {canCreate && (
+              <Button onClick={openCreate}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add {noun}
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      {loadError && (
+      {list.isError && (
         <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700" role="alert">
-          {loadError}
+          {errorMessage(list.error, `Failed to load ${noun}s`)}
         </div>
       )}
 
@@ -298,9 +316,10 @@ export function ResourcePage<T extends { id: number | string }>({
         <Table
           columns={tableColumns}
           data={rows}
-          isLoading={loading}
+          isLoading={list.isLoading}
           keyExtractor={(r) => String(r.id)}
           emptyMessage={`No ${noun.toLowerCase()}s yet`}
+          emptyContent={emptyState}
         />
       </Card>
 
@@ -316,7 +335,12 @@ export function ResourcePage<T extends { id: number | string }>({
                 helperText: fd.help,
               };
               const value = form[fd.key] ?? '';
-              const set = (v: any) => setForm((f) => ({ ...f, [fd.key]: v }));
+              const set = (v: any) =>
+                setForm((f) => {
+                  const next = { ...f, [fd.key]: v };
+                  fd.resetOnChange?.forEach((k) => (next[k] = emptyForm[k]));
+                  return next;
+                });
               if (fd.type === 'checkbox')
                 return (
                   <label key={fd.key} className="flex items-center gap-2 text-sm text-text-primary sm:col-span-2">
@@ -337,12 +361,14 @@ export function ResourcePage<T extends { id: number | string }>({
                   </div>
                 );
               if (fd.type === 'select') {
-                const opts = fd.options ?? dynamicOptions[fd.key] ?? [];
+                const opts = optionsFor(fd);
+                // The backend may store codes in a different case than the option values.
+                const selected = opts.find((o) => o.value.toLowerCase() === String(value).toLowerCase())?.value ?? String(value);
                 return (
                   <Select
                     key={fd.key}
                     {...common}
-                    value={String(value)}
+                    value={selected}
                     onChange={(e) => set(e.target.value)}
                     options={fd.required ? opts : [{ value: '', label: '— none —' }, ...opts]}
                   />
@@ -371,46 +397,37 @@ export function ResourcePage<T extends { id: number | string }>({
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" loading={saving}>
+            <Button type="submit" loading={saveMutation.isPending}>
               {editing ? 'Save changes' : `Create ${noun.toLowerCase()}`}
             </Button>
           </div>
         </form>
       </Modal>
 
-      <Modal isOpen={!!toDelete} onClose={() => setToDelete(null)} title={`Delete ${noun}`} size="sm">
-        <p className="text-sm text-text-secondary">
-          This permanently deletes the {noun.toLowerCase()}. It can&apos;t be undone.
-        </p>
-        <div className="flex justify-end gap-2 pt-4">
-          <Button variant="secondary" onClick={() => setToDelete(null)}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={remove} loading={saving}>
-            Delete
-          </Button>
-        </div>
-      </Modal>
+      <ConfirmDialog
+        isOpen={!!toDelete}
+        title={`Delete ${noun}`}
+        message={`This permanently deletes the ${noun.toLowerCase()}. It can't be undone.`}
+        confirmLabel="Delete"
+        danger
+        loading={deleteMutation.isPending}
+        onCancel={() => setToDelete(null)}
+        onConfirm={() => toDelete && deleteMutation.mutate(toDelete)}
+      />
 
-      <Modal isOpen={!!pendingConfirm} onClose={() => setPendingConfirm(null)} title="Confirm action" size="sm">
-        <p className="text-sm text-text-secondary">{pendingConfirm?.message}</p>
-        <div className="flex justify-end gap-2 pt-4">
-          <Button variant="secondary" onClick={() => setPendingConfirm(null)}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={async () => {
-              if (!pendingConfirm) return;
-              const { action, row } = pendingConfirm;
-              setPendingConfirm(null);
-              await executeAction(action, row);
-            }}
-          >
-            Confirm
-          </Button>
-        </div>
-      </Modal>
+      <ConfirmDialog
+        isOpen={!!pendingConfirm}
+        title="Confirm action"
+        message={pendingConfirm?.action.confirm}
+        danger
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={() => {
+          if (!pendingConfirm) return;
+          const current = pendingConfirm;
+          setPendingConfirm(null);
+          actionMutation.mutate(current);
+        }}
+      />
     </div>
   );
 }

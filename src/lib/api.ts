@@ -49,7 +49,6 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong'):
 
 // ── Admin: bookings, stats, priority rules ─────────────────────
 import type {
-  Booking,
   BookingDetail,
   BookingListResponse,
   BookingFilters,
@@ -100,7 +99,7 @@ export const schedulerApi = {
 };
 
 export const airportApi = {
-  list: (params?: { active_only?: boolean }) => api.get<Airport[]>('/airports', { params }),
+  list: (params?: { active_only?: boolean; limit?: number }) => api.get<Airport[]>('/airports', { params }),
   create: (data: Partial<Airport>) => api.post<Airport>('/airports', data),
   update: (iata: string, data: Partial<Airport>) => api.put<Airport>(`/airports/${iata}`, data),
   delete: (iata: string) => api.delete(`/airports/${iata}`),

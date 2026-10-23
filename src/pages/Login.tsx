@@ -1,7 +1,7 @@
 import { Suspense, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowRight, Eye, EyeOff, Plane } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { errorMessage } from '@/lib/api';
@@ -82,8 +82,18 @@ export default function LoginPage() {
         className="relative hidden lg:flex flex-col justify-between p-12 overflow-hidden"
         style={{ background: 'linear-gradient(180deg,#0A3470 0%,#072D62 45%,#04204A 100%)' }}
       >
+        {/* Fine grid + vignette */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-60"
+          style={{
+            backgroundImage: 'linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px)',
+            backgroundSize: '40px 40px',
+            WebkitMaskImage: 'radial-gradient(ellipse at 30% 40%, #000 20%, transparent 75%)',
+            maskImage: 'radial-gradient(ellipse at 30% 40%, #000 20%, transparent 75%)',
+          }}
+        />
         {/* Gold glow blobs */}
-        <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full opacity-[0.08] animate-float-slow"
+        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-[0.16] animate-float-slow"
           style={{ background: 'radial-gradient(circle,#B39661,transparent 70%)' }} />
         <div className="absolute bottom-0 right-0 w-60 h-60 rounded-full opacity-[0.06] animate-float-slow"
           style={{ background: 'radial-gradient(circle,#ffffff,transparent 70%)', animationDelay: '4s' }} />
@@ -110,17 +120,19 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Source systems */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="flex -space-x-2">
-            {['AI', 'IX', 'EY'].map((code) => (
-              <div key={code} className="w-8 h-8 rounded-full bg-white/10 border-2 border-[#072D62] flex items-center justify-center">
-                <span className="text-[9px] font-bold text-white/70 font-mono">{code}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-white/40 text-xs">All source systems connected</p>
-        </div>
+        {/* Capabilities */}
+        <ul className="relative z-10 grid grid-cols-3 gap-6 border-t border-white/10 pt-6">
+          {[
+            ['Dispatch', 'Priority-based vendor routing'],
+            ['Channels', 'iWay, Ride & Safetrax'],
+            ['Visibility', 'Live bookings & analytics'],
+          ].map(([t, d]) => (
+            <li key={t}>
+              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent-gold">{t}</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-white/50">{d}</p>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* ── Right: form panel ── */}
@@ -144,14 +156,15 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-7">
-            <h1 className="font-serif text-3xl font-medium tracking-tight text-text-primary">Welcome back</h1>
+            <h1 className="font-serif text-[2rem] font-medium tracking-tight text-text-primary">Welcome back</h1>
             <p className="text-text-secondary mt-1 text-sm">Sign in to your admin account to continue</p>
           </div>
 
           <div
-            className="rounded-2xl border border-border p-7"
-            style={{ background: 'rgba(255,255,255,.9)', backdropFilter: 'blur(8px)', boxShadow: '0 4px 12px rgba(7,45,98,.08),0 14px 32px rgba(7,45,98,.1)' }}
+            className="relative rounded-2xl border border-border/80 p-7 overflow-hidden"
+            style={{ background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(10px)', boxShadow: '0 4px 12px rgba(7,45,98,.06),0 24px 48px rgba(7,45,98,.10)' }}
           >
+            <div className="absolute inset-x-0 top-0 h-px" style={{ background: 'linear-gradient(90deg,transparent,#B39661,transparent)' }} />
             <Suspense>
               <LoginForm />
             </Suspense>
